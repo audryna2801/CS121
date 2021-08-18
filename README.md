@@ -14,15 +14,23 @@ Repository for all CS 121 programming assignments
   analyze.py: immplementation of algorithms to analyze election tweets
 # Polling Simulation: Simulates a polling place
   data: Precinct data
+  
   util.py: Utility functions
+  
   simulate.py: Main file for simulation
 # Linear Regression w/ Numpy: Linear regression and model selection using numpy
   data: regression data
+  
   output.py: Generates sample output
+  
   regression.py: Main file for linear regression and model selection
+  
   util.py: Utility functions
 # Treemap: Creating a treemap using recursion
   drawing.py: Main file for treemap drawing
+  
   tree.py: Tree class
+  
   get_files.sh: To pull files
+  
   treemap.py: Code for constructing treemap
