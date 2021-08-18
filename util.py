@@ -1,114 +1,123 @@
 '''
-Analyzing Election Tweets
+Polling places
 
-Utility functions
+Utilities
 '''
 
-import sys
 import json
+import random
+import sys
 
-def sort_count_pairs(l):
+# DO NOT MODIFY THIS FILE
+# pylint: disable-msg= invalid-name, too-many-arguments, line-too-long
+# pylint: disable-msg= too-many-branches
+
+def gen_voter_parameters(arrival_rate, voting_duration_rate,
+                         percent_straight_ticket, straight_ticket_duration=2):
     '''
-    Sort pairs using the second value as the primary sort key and the
-    first value as the seconary sort key.
+    Draw gap and voting duration from exponetial distribution
 
     Inputs:
-       l: list of pairs.
+        arrival_rate: (float) Lambda for gap
+        voting_duration_rate: (float) Lambda for voting duration
+        percent_straight_ticket: (float) Percentage straight-ticket voters
+        straight_ticket_duration: (float) Voting duration for straight-ticket voters
 
-    Returns: list of key/value pairs
-
-    Example use:
-    In [1]: import util
-
-    In [2]: util.sort_count_pairs([('D', 5), ('C', 2), ('A', 3), ('B', 2)])
-    Out[2]: [('D', 5), ('A', 3), ('B', 2), ('C', 2)]
-
-    In [3]: util.sort_count_pairs([('C', 2), ('A', 3), ('B', 7), ('D', 5)])
-    Out[3]: [('B', 7), ('D', 5), ('A', 3), ('C', 2)]
-    '''
-    return list(sorted(l, key=cmp_to_key(cmp_count_tuples)))
-
-#Make lint be quiet.
-#pylint: disable-msg=unused-argument, too-few-public-methods
-
-def cmp_to_key(mycmp):
-    '''
-    Convert a cmp= function into a key= function
-    From: https://docs.python.org/3/howto/sorting.html
+    Returns:
+        (gap, voting duration) as a pair of floats
     '''
 
-    class CmpFn:
-        '''
-        Compare function class.
-        '''
-        def __init__(self, obj, *args):
-            self.obj = obj
-        def __lt__(self, other):
-            return mycmp(self.obj, other.obj) < 0
-        def __gt__(self, other):
-            return mycmp(self.obj, other.obj) > 0
-        def __eq__(self, other):
-            return mycmp(self.obj, other.obj) == 0
-        def __le__(self, other):
-            return mycmp(self.obj, other.obj) <= 0
-        def __ge__(self, other):
-            return mycmp(self.obj, other.obj) >= 0
-        def __ne__(self, other):
-            return mycmp(self.obj, other.obj) != 0
-    return CmpFn
+    if random.random() <= percent_straight_ticket:
+        # Straight-ticket
+        voting_duration = straight_ticket_duration
+    else:
+        # Split-ticket
+        voting_duration = random.expovariate(voting_duration_rate)
+
+    gap = random.expovariate(arrival_rate)
+
+    return (gap, voting_duration)
 
 
-def cmp_count_tuples(t0, t1):
+def load_precincts(precincts_filename):
     '''
-    Compare pairs using the second value as the primary key and the
-    first value as the secondary key.  Order the primary key in
-    non-increasing order and the secondary key in non-decreasing
-    order.
+    Load a precincts file.
 
     Inputs:
-        t0: pair
-        t1: pair
+        precincts_filename: (string) Name of the precincts file
 
-    Returns: -1, 0, 1
-
-    Sample uses:
-        cmp(("A", 3), ("B", 2)) => -1
-
-        cmp(("A", 2), ("B", 3)) => 1
-
-        cmp(("A", 3), ("B", 3)) => -1
-
-        cmp(("A", 3), ("A", 3))
-    '''
-    (key0, val0) = t0
-    (key1, val1) = t1
-    if val0 > val1:
-        return -1
-
-    if val0 < val1:
-        return 1
-
-    if key0 < key1:
-        return -1
-
-    if key0 > key1:
-        return 1
-
-    return 0
-
-
-def get_json_from_file(filename):
-    '''
-    Read data from a JSON file.
-
-    Inputs:
-      filename: string with name of the file to read
-
-    Returns: data structure from the JSON file
+    Returns:
+        A tuple containing:
+        - a list of precinct dictionaries
+        - a seed (integer)
     '''
 
     try:
-        return json.load(open(filename))
+        config = json.load(open(precincts_filename))
     except OSError as e:
-        print(e, file=sys.stderr)
-        sys.exit(1)
+        print("{}".format(e), file=sys.stderr)
+        return None
+
+    if not isinstance(config, dict):
+        raise ValueError("Configuration file syntax error: should contain a JSON object")
+
+    # Validate seed
+    if "seed" not in config or not isinstance(config["seed"], int):
+        raise ValueError("Configuration file syntax error: does not contain a seed")
+
+    # Validate precincts
+    if "precincts" not in config or not isinstance(config["precincts"], list):
+        raise ValueError("Configuration file syntax error: does not contain a list of precincts")
+
+    if config["precincts"] == []:
+        raise ValueError("Configuration file must contain at least one precinct")
+
+    for p in config["precincts"]:
+        if not isinstance(p, dict):
+            raise ValueError("List of precincts includes an unexpected value: {}".format(p))
+
+        if "name" not in p:
+            raise ValueError("Precinct is missing 'name' field: {}".format(p))
+
+        for f in ("hours_open", "num_booths", "num_voters", "voting_duration_rate",
+                  "arrival_rate", "percent_straight_ticket", "straight_ticket_duration"):
+            if f not in p:
+                raise ValueError("Precinct {} is missing '{}' field".format(p["name"], f))
+
+    return config["precincts"], config["seed"]
+
+
+def print_voters(voters, filename=None):
+    '''
+    Print the voters generated by the simulation.
+
+    Inputs:
+      voters: A list of voter objects
+      filename: (string) Specifies the name of a file to use,
+         if included.
+    '''
+    if filename is None:
+        file = sys.stdout
+    else:
+        try:
+            file = open(filename, "w")
+        except OSError as e:
+            print(e, file=sys.stderr)
+            sys.exit(1)
+
+    print("Arrival Time   Voting Duration   Start Time    Departure Time",
+          file=file)
+    for v in voters:
+        s = "{:10.2f}"
+        none_str = "      None"
+        at = s.format(v.arrival_time) if v.arrival_time else none_str
+        vd = s.format(v.voting_duration) if v.voting_duration else none_str
+        st = s.format(v.start_time) if v.start_time else none_str
+        if v.arrival_time is None or \
+           v.voting_duration is None or \
+           v.start_time is None:
+            dt = none_str
+        else:
+            dt = s.format(v.start_time + v.voting_duration)
+        combined = "{}   {}       {}        {}\n"
+        print(combined.format(at, vd, st, dt), file=file)
